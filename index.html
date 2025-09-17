@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Color Command Website</title>
+  <style>
+    :root{
+      --bg: #ffffff;
+      --fg: #111111;
+      --accent: #0077ff;
+      --transition: 400ms ease;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{
+      background:var(--bg);
+      color:var(--fg);
+      transition: background var(--transition), color var(--transition);
+      display:flex;align-items:center;justify-content:center;padding:24px;
+    }
+    .card{
+      width:100%;max-width:900px;background:rgba(255,255,255,0.6);backdrop-filter:blur(6px);
+      border-radius:14px;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,0.08);
+      transition: background var(--transition), color var(--transition);
+    }
+    h1{margin:0 0 12px;font-size:20px}
+    p.lead{margin:0 0 18px;color:rgba(0,0,0,0.6)}
+    .controls{display:flex;gap:12px;flex-wrap:wrap}
+    input[type="text"], select{padding:10px 12px;border-radius:8px;border:1px solid #ddd;min-width:220px}
+    button{padding:10px 12px;border-radius:8px;border:0;background:var(--accent);color:white;cursor:pointer}
+    button.ghost{background:transparent;color:var(--fg);border:1px solid #ddd}
+    .swatches{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+    .swatch{width:40px;height:40px;border-radius:8px;border:1px solid rgba(0,0,0,0.08);cursor:pointer}
+    .preview{margin-top:18px;padding:14px;border-radius:10px;background:rgba(0,0,0,0.03)}
+    .small{font-size:13px;color:rgba(0,0,0,0.55)}
+    .controls-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+    .row{display:flex;align-items:center;gap:8px}
+    .footer{margin-top:20px;font-size:14px;color:rgba(0,0,0,0.65);text-align:center}
+    .footer a{color:var(--accent);text-decoration:none}
+    @media (max-width:700px){.controls{flex-direction:column}.controls-right{margin-left:0}}
+  </style>
+</head>
+<body>
+  <div class="card" id="app">
+    <h1>Color Command Website</h1>
+    <p class="lead">Type a command (or use voice) to change the page colors. Examples:
+      <span class="small">"set background to #ffcc00"</span>,
+      <span class="small">"make text blue"</span>,
+      <span class="small">"theme dark"</span>
+    </p>
+
+    <div class="controls">
+      <input id="commandInput" type="text" placeholder="Enter command, e.g. 'set background to teal'" autofocus>
+
+      <div class="row controls-right">
+        <button id="applyBtn">Apply</button>
+        <button id="randomBtn" class="ghost">Random</button>
+        <button id="resetBtn" class="ghost">Reset</button>
+        <button id="voiceBtn" class="ghost">🎤 Voice</button>
+      </div>
+    </div>
+
+    <div class="swatches" aria-hidden="true"></div>
+
+    <div class="preview" id="preview">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <strong>Preview</strong>
+          <div class="small">Background and text update in real time when you apply a command.</div>
+        </div>
+        <div class="small">Current: <span id="currentState">bg: #ffffff, fg: #111111</span></div>
+      </div>
+
+      <div style="margin-top:12px">
+        <p>This page supports color names, hex codes (#rrggbb), rgb(r,g,b), rgba(), and simple theme commands like "theme dark" or "theme light".</p>
+        <p class="small">You can target: background, text, accent. Commands accepted:
+          <ul class="small">
+            <li>set background to &lt;color&gt;</li>
+            <li>make text &lt;color&gt;</li>
+            <li>set accent to &lt;color&gt;</li>
+            <li>theme dark | theme light</li>
+            <li>random | reset</li>
+          </ul>
+        </p>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Made by <strong>Avinash Murre</strong></p>
+      <p>Follow me on Instagram: <a href="https://www.instagram.com/__.mr.introvert.___/?__pwa=1" target="_blank">@__.mr.introvert.___</a></p>
+    </div>
+  </div>
+
+  <script>
+    function isValidHex(s){return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s)}
+    function isRgb(s){return /^(rgba?)\s*\(/i.test(s)}
+    function isColorName(s){const option = new Option(); option.style.color = ''; option.style.color = s; return option.style.color !== ''}
+
+    function normalizeColorToken(token){token = token.trim(); if(/^([0-9a-f]{6})$/i.test(token)) token = '#'+token; return token;}
+
+    function applyColors({bg,fg,accent}){
+      if(bg) document.documentElement.style.setProperty('--bg', bg);
+      if(fg) document.documentElement.style.setProperty('--fg', fg);
+      if(accent) document.documentElement.style.setProperty('--accent', accent);
+      updateStateText();
+    }
+
+    function updateStateText(){
+      const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+      const fg = getComputedStyle(document.documentElement).getPropertyValue('--fg').trim();
+      document.getElementById('currentState').textContent = `bg: ${bg}, fg: ${fg}`;
+    }
+
+    function randomColor(){return `rgb(${Math.floor(Math.random()*256)}, ${Math.floor(Math.random()*256)}, ${Math.floor(Math.random()*256)})`;}
+
+    function parseCommand(text){
+      text = (text||'').trim();
+      const lower = text.toLowerCase();
+      if(!text) return {type:'empty'};
+      if(lower === 'reset') return {type:'reset'};
+      if(lower === 'random') return {type:'random'};
+      if(/^theme\s+dark/.test(lower)) return {type:'theme', theme:'dark'};
+      if(/^theme\s+light/.test(lower)) return {type:'theme', theme:'light'};
+
+      const reSet = /(set|make)\s+(background|text|accent)\s+(to\s+)?(.+)/i;
+      const m = text.match(reSet);
+      if(m){return {type:'set', target:m[2].toLowerCase(), color:normalizeColorToken(m[4].trim())}};
+
+      const reShort = /^(background|text|accent)\s+(.+)$/i;
+      const m2 = text.match(reShort);
+      if(m2){return {type:'set', target:m2[1].toLowerCase(), color:normalizeColorToken(m2[2])}};
+
+      return {type:'set', target:'background', color:normalizeColorToken(text)};
+    }
+
+    function executeParsed(parsed){
+      if(!parsed) return;
+      if(parsed.type === 'empty') return;
+      if(parsed.type === 'reset'){
+        document.documentElement.style.setProperty('--bg','#ffffff');
+        document.documentElement.style.setProperty('--fg','#111111');
+        document.documentElement.style.setProperty('--accent','#0077ff');
+        return;
+      }
+      if(parsed.type === 'random'){applyColors({bg: randomColor(), fg: randomColor(), accent: randomColor()}); return;}
+      if(parsed.type === 'theme'){
+        if(parsed.theme === 'dark') applyColors({bg:'#0f1724', fg:'#e6eef8', accent:'#3b82f6'});
+        else applyColors({bg:'#ffffff', fg:'#111827', accent:'#0077ff'});
+        return;
+      }
+      if(parsed.type === 'set'){
+        let c = parsed.color;
+        if(isValidHex(c) || isRgb(c) || isColorName(c)){}
+        if(parsed.target === 'background') applyColors({bg:c});
+        if(parsed.target === 'text') applyColors({fg:c});
+        if(parsed.target === 'accent') applyColors({accent:c});
+      }
+    }
+
+    const commandInput = document.getElementById('commandInput');
+    const applyBtn = document.getElementById('applyBtn');
+    const randomBtn = document.getElementById('randomBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const voiceBtn = document.getElementById('voiceBtn');
+
+    applyBtn.addEventListener('click', ()=>{executeParsed(parseCommand(commandInput.value));});
+    commandInput.addEventListener('keydown', (e)=>{if(e.key === 'Enter'){executeParsed(parseCommand(commandInput.value));}});
+    randomBtn.addEventListener('click', ()=>{executeParsed({type:'random'});});
+    resetBtn.addEventListener('click', ()=>{executeParsed({type:'reset'});});
+
+    const swatchColors = ['#111827','#0f1724','#ffffff','#f97316','#ef4444','#0ea5a4','#06b6d4','#8b5cf6','#f59e0b'];
+    const swatches = document.querySelector('.swatches');
+    swatchColors.forEach(c=>{const el=document.createElement('button'); el.className='swatch'; el.title=c; el.style.background=c; el.addEventListener('click', ()=>{applyColors({bg:c});}); swatches.appendChild(el);});
+
+    updateStateText();
+
+    let recognition=null; let listening=false;
+    if('webkitSpeechRecognition' in window || 'SpeechRecognition' in window){
+      const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new Rec(); recognition.lang='en-US'; recognition.interimResults=false; recognition.maxAlternatives=1;
+      recognition.addEventListener('result',(ev)=>{const text=ev.results[0][0].transcript; commandInput.value=text; executeParsed(parseCommand(text));});
+      recognition.addEventListener('end',()=>{listening=false; voiceBtn.textContent='🎤 Voice';});
+      voiceBtn.addEventListener('click',()=>{if(!listening){recognition.start(); listening=true; voiceBtn.textContent='🛑 Stop';} else {recognition.stop(); listening=false; voiceBtn.textContent='🎤 Voice';}});
+    } else {voiceBtn.addEventListener('click',()=>{alert('Voice commands not supported in this browser.');});}
+
+    commandInput.addEventListener('input',()=>{const parsed=parseCommand(commandInput.value); const preview=document.getElementById('preview'); if(parsed && parsed.type==='set'){preview.style.borderColor=parsed.color||'transparent';} else preview.style.borderColor='transparent';});
+
+    const observer=new MutationObserver(()=>{
+      const bg=getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+      const tmp=document.createElement('div'); tmp.style.color=bg; document.body.appendChild(tmp);
+      const computed=getComputedStyle(tmp).color; document.body.removeChild(tmp);
+      const match=computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if(match){const r=+match[1],g=+match[2],b=+match[3]; const luminance=(0.299*r+0.587*g+0.114*b)/255; if(luminance<0.5) document.documentElement.style.setProperty('--fg','#f3f4f6'); else document.documentElement.style.setProperty('--fg','#111827');}
+      updateStateText();
+    });
+    observer.observe(document.documentElement,{attributes:true,attributeFilter:[]});
+  </script>
+</body>
+</html>
